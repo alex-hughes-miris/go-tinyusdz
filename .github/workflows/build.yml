@@ -1,0 +1,79 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "dev" ]
+  pull_request:
+    branches: [ "dev" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Go Code
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+
+    - name: Checkout TinyUSDZ
+      uses: actions/checkout@v4
+      with:
+        repository: lighttransport/tinyusdz
+        path: external/tinyusdz
+        fetch-depth: 0 # Fetch all history for tags, or remove to fetch HEAD
+
+    - name: Apply Patches
+      # loops through all .patch files in your repo and applies them to the cloned C++ repo
+      run: |
+        if [ -d "build/patches/tinyusdz" ]; then
+          for patch in build/patches/tinyusdz/*.patch; do
+            echo "Applying patch: $patch"
+            # -p1 strips the a/ b/ prefixes from git diffs
+            patch -d external/tinyusdz -p1 < "$patch"
+          done
+        else
+          echo "No patches found, skipping."
+        fi
+
+    - name: Build TinyUSDZ C Library
+      working-directory: external/tinyusdz
+      run: |
+        cmake -B build -S . \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DTINYUSDZ_BUILD_C_API=ON \
+          -DTINYUSDZ_BUILD_SHARED_LIBS=ON
+        cd build
+        make
+
+    - name: Install Artifacts to Go Project
+      # Moves the built headers and libs to where your cgo flags expect them
+      run: |
+        mkdir -p include lib
+        
+        # Copy Header
+        cp external/tinyusdz/src/c-tinyusd.h include/
+        
+        # Copy Libs (Handle both .so and .a cases)
+        # Note: The target name is typically libc-tinyusd.so
+        find external/tinyusdz/build -name "libc-tinyusd*" -exec cp {} lib/ \;
+        
+        echo "Artifacts installed:"
+        ls -R include lib
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Generate Bindings
+      run: go generate ./...
+
+    - name: Run Tests
+      # We must set LD_LIBRARY_PATH so the test binary can find the .so file at runtime
+      run: |
+        export LD_LIBRARY_PATH=$(pwd)/lib:$LD_LIBRARY_PATH
+        go test -v ./...
