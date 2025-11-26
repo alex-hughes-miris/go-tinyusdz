@@ -96,8 +96,10 @@ for _, name := range props {
 If you are developing this library or need to rebuild the C++ core:
 
 1. **Clone the Repo**:
-   git clone [https://github.com/alex-hughes-miris/go-tinyusdz.git](https://github.com/alex-hughes-miris/go-tinyusdz.git)
+   ```bash
+   git clone https://github.com/alex-hughes-miris/go-tinyusdz.git
    cd go-tinyusdz
+   ```
 
 2. Fetch Dependencies:
    This repo expects the tinyusdz source code to be available or the library to be pre-compiled. A helper script or CI job typically handles this.
